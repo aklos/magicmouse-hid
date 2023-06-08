@@ -13,7 +13,7 @@ MODPROBE_DIR="/etc/modprobe.d"
 
 
 # Copy Modprobe config file
-cp -f ${DIR}${MODPROBE_DIR}/hid-magicmouse.conf ${MODPROBE_DIR}/hid-magicmouse.conf
+cp -f ${DIR}${MODPROBE_DIR}/hid-magicmouse2.conf ${MODPROBE_DIR}/hid-magicmouse2.conf
 
 # Install drive through DKMS
 chmod u+x ${DIR}/scripts/install.sh
@@ -26,4 +26,4 @@ systemctl restart bluetooth
 echo "options bluetooth disable_esco=1" | tee /etc/modprobe.d/bluetooth-tweaks.conf
 
 # Load driver
-sudo modprobe -a hid_magicmouse
+sudo modprobe -a hid_magicmouse2

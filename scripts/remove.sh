@@ -2,7 +2,7 @@
 
 set -e
 
-dkms_name="hid-magicmouse-dkms"
+dkms_name="hid-magicmouse2-dkms"
 dkms_version="4.18+magicmouse2"
 
 if dkms status -m $dkms_name -v $dkms_version | egrep '(added|built|installed)' >/dev/null ; then

@@ -1,0 +1,1 @@
+cmd_/home/alex/Projects/magicmouse-hid/linux/drivers/hid/Module.symvers :=  scripts/mod/modpost -m -a     -o /home/alex/Projects/magicmouse-hid/linux/drivers/hid/Module.symvers -T /home/alex/Projects/magicmouse-hid/linux/drivers/hid/modules.order -i Module.symvers -e 

@@ -16,10 +16,10 @@ chmod u+x ${DIR}/scripts/remove.sh
 ${DIR}/scripts/remove.sh
 
 # Remove loaded driver
-modprobe -r hid_magicmouse
+modprobe -r hid_magicmouse2
 
 # Remove Modprobe configuration file
-rm -f ${MODPROBE_DIR}/hid-magicmouse.conf
+rm -f ${MODPROBE_DIR}/hid-magicmouse2.conf
 
 # Restart Bluetooth
 systemctl restart bluetooth

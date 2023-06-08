@@ -1,6 +1,6 @@
 # Linux Apple Magic Mouse 2 and Magic Trackpad 2 Driver
 
-This repository contains the linux hid-magicmouse driver with Magic Trackpad 2 and Magic Mouse 2 support for Linux 4.18 onwards. For older kernels you might have to diff and backport. It also contains 2 fixes to the Magic Mouse 2 regarding Bluetooth random disconnections and this driver not loading on bluetooth reconnection.
+This repository contains the linux hid-magicmouse2 driver with Magic Trackpad 2 and Magic Mouse 2 support for Linux 4.18 onwards. For older kernels you might have to diff and backport. It also contains 2 fixes to the Magic Mouse 2 regarding Bluetooth random disconnections and this driver not loading on bluetooth reconnection.
 
 This driver is based off of the work of @robotrovsky, @svartalf, @0xABAD and probably others.
 
@@ -8,10 +8,15 @@ Please help to test this driver and report issues.
 
 **NOTE**: Since kernel version 5.15, there is support for the mouse without the need for this driver. We try to backport changes to this driver to have it up-to-date with the one on the kernel and try to offer a bit more functionality but it is not perfect. If you want the mouse to just work either install a more recent kernel or proceed with this driver installation.
 
+## HELPER COMMANDS
+
+1. Track mouse button activation (and scrolling): `xev -event button | grep button`
+2. Track kernal logging (`printk`): `tail -f /var/log/kern.log`
+3. View driver errors: `dmesg | tail`
+
 ## Ubuntu (and derivatives)
 
 A `.deb` file is now available in Releases. Get the [latest version here](https://github.com/RicardoEPRodrigues/magicmouse-hid/releases/latest).
-
 
 ## Install Driver with DKMS and the two fixes.
 
@@ -27,38 +32,40 @@ sudo ./install.sh
 
 ## Uninstall Driver.
 
-
 ```
 sudo ./remove.sh
 ```
 
 ## Apple Magic Trackpad 2
+
 The driver supports bluetooth and USB for the trackpad. To connect the Trackpad via bluetooth, it must be clicked once after it is turned on, then the Trackpad tries to reconnect to the last paired (and trusted) connection.
 
 ## Apple Magic Mouse 2
+
 The drivers supports regular mouse motion and additionally scrolling and mouse middle click. Middle click is a single finger click near the middle portion of the touch surface OR a 3 finger click anywhere on the touch surface if you put the mouse in 3 finger middle click mode. Scrolling is a single finger up or down motion anywhere on the touch surface.
 
 ### Changing Parameters
 
-Several parameters are avaliable for you to modify to personalize the driver to your taste. These can be found in `/etc/modprobe.d/hid-magicmouse.conf` after install. Modify them and the next time the driver is loaded it will have the new values.
+Several parameters are avaliable for you to modify to personalize the driver to your taste. These can be found in `/etc/modprobe.d/hid-magicmouse2.conf` after install. Modify them and the next time the driver is loaded it will have the new values.
 
 ### Reloading the driver
 
 After changing the parameters the driver can be reloaded using the following commands:
 
 ```
-sudo rmmod hid_magicmouse
-sudo modprobe hid_magicmouse
+sudo rmmod hid_magicmouse2
+sudo modprobe hid_magicmouse2
 ```
 
 ## Troubleshooting (outdated)
-If the driver is not working, please make sure that the correct hid-magicmouse driver gets loaded and try the following steps:
+
+If the driver is not working, please make sure that the correct hid-magicmouse2 driver gets loaded and try the following steps:
 
 ```
 cd linux/drivers/hid
 make
-sudo rmmod hid_magicmouse
-sudo insmod ./hid-magicmouse.ko
+sudo rmmod hid_magicmouse2
+sudo insmod ./hid-magicmouse2.ko
 tail -f ~/.local/share/xorg/Xorg.0.log
 ```
 
@@ -115,8 +122,6 @@ Now unplug the trackpad and plug it back in, to see which driver gets loaded.
 		 */
 ```
 
-
-
 ## Fixes
 
 Below is the explanation to 2 fixes performed when running the `install.sh` shown above. The first relates to the disconnection of the mouse over bluetooth and will restart the bluetooth service. The second regards the driver not being loaded when the mouse reconnects with the computer.
@@ -155,10 +160,10 @@ reload() {
     if [ ! -f "$FILE" ]; then
         touch $FILE
 
-        modprobe -r hid_magicmouse
+        modprobe -r hid_magicmouse2
         sleep 2
         modprobe hid-generic
-		modprobe hid_magicmouse \
+		modprobe hid_magicmouse2 \
            scroll_acceleration=1 \
            scroll_speed=25 \
            middle_click_3finger=1
@@ -189,17 +194,18 @@ SUBSYSTEM=="input", \
 ```
 
 The `10-` prefix was picked arbitrarily and could be any number as it is used to determine the lexical ordering of rules in the kernel. The earlier the file is loaded guarantees that the rule will be applied before any others.
- 
+
 Now we need to reload the `udev` database with:
 
 ```
 sudo udevadm control -R
 ```
 
-With that in place the Magic Mouse 2 will now be properly loaded with scrolling when connected via Bluetooth. Note that isn't perfect and bugs may be around. 
+With that in place the Magic Mouse 2 will now be properly loaded with scrolling when connected via Bluetooth. Note that isn't perfect and bugs may be around.
 
 ## Thanks
-* https://github.com/ponyfleisch/hid-magictrackpad2
-* https://github.com/adam-h/Linux-Magic-Trackpad-2-Driver
-* https://github.com/bobbysue/Linux-Magic-Trackpad-2-Driver
-* https://github.com/svartalf/hid-magicmouse2
+
+- https://github.com/ponyfleisch/hid-magictrackpad2
+- https://github.com/adam-h/Linux-Magic-Trackpad-2-Driver
+- https://github.com/bobbysue/Linux-Magic-Trackpad-2-Driver
+- https://github.com/svartalf/hid-magicmouse22

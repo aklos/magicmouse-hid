@@ -22,6 +22,7 @@
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/workqueue.h>
+#include <linux/kernel.h>
 
 #include "hid-ids.h"
 
@@ -34,17 +35,17 @@ module_param(middle_click_3finger, bool, 0644);
 MODULE_PARM_DESC(middle_click_3finger, "Use 3 finger click to emulate middle button");
 
 static int middle_button_start = -250;
-static int middle_button_stop = +250;
+static int middle_button_stop = +750;
 
 static bool emulate_scroll_wheel = true;
 module_param(emulate_scroll_wheel, bool, 0644);
 MODULE_PARM_DESC(emulate_scroll_wheel, "Emulate a scroll wheel");
 
-static bool stop_scroll_while_moving = true;
+static bool stop_scroll_while_moving = false;
 module_param(stop_scroll_while_moving, bool, 0644);
 MODULE_PARM_DESC(stop_scroll_while_moving, "Stop scrolling whenever the mouse moves");
 
-static unsigned int scroll_speed = 32;
+static unsigned int scroll_speed = 0;
 static int param_set_scroll_speed(const char *val,
 				  const struct kernel_param *kp) {
 	unsigned long speed;
@@ -80,7 +81,7 @@ static int param_set_scroll_delay_pos_y(const char *val,
 module_param_call(scroll_delay_pos_y, param_set_scroll_delay_pos_y, param_get_uint, &scroll_delay_pos_y, 0644);
 MODULE_PARM_DESC(scroll_delay_pos_y, "Scroll Y position delay before start scrolling");
 
-static bool scroll_acceleration = false;
+static bool scroll_acceleration = true;
 module_param(scroll_acceleration, bool, 0644);
 MODULE_PARM_DESC(scroll_acceleration, "Accelerate sequential scroll events");
 
@@ -110,7 +111,7 @@ MODULE_PARM_DESC(report_undeciphered, "Report undeciphered multi-touch state fie
 #define SCROLL_HR_STEPS 10
 #define SCROLL_HR_MULT (120 / SCROLL_HR_STEPS)
 #define SCROLL_HR_THRESHOLD 90 /* units */
-#define SCROLL_ACCEL_DEFAULT 3
+#define SCROLL_ACCEL_DEFAULT 1
 
 /* Touch surface information. Dimension is in hundredths of a mm, min and max
  * are in units. */
@@ -211,22 +212,91 @@ static int magicmouse_firm_touch(struct magicmouse_sc *msc)
 	return touch;
 }
 
-static int magicmouse_detect_3finger_click(struct magicmouse_sc *msc)
+static int magicmouse_firm_touch_v2(struct magicmouse_sc *msc, int firmness)
 {
-	int fingers = 0;
+	int touch = 0;
 	int ii;
 
-	/* Only consider fingers with size > 10 as real clicks.
-	 * TODO: Consider better palm rejection.
+	/* If there is only one "firm" touch, set touch to its
+	 * tracking ID.
 	 */
 	for (ii = 0; ii < msc->ntouches; ii++) {
 		int idx = msc->tracking_ids[ii];
-		if (msc->touches[idx].size > 10) {
-			fingers++;
+		if (msc->touches[idx].size < firmness) {
+			/* Ignore this touch. */
+			continue;
+		} 
+		
+		// if (touch >= 0) {
+		// 	touch = -2;
+		// 	break;
+		// } else {
+		// 	touch = idx;
+		// }
+		touch++;
+	}
+
+	return touch;
+}
+
+static int magicmouse_detect_3finger_click(struct magicmouse_sc *msc)
+{
+	// int fingers = 0;
+	// int ii;
+
+	// /* Only consider fingers with size > 10 as real clicks.
+	//  * TODO: Consider better palm rejection.
+	//  */
+	// for (ii = 0; ii < msc->ntouches; ii++) {
+	// 	int idx = msc->tracking_ids[ii];
+	// 	if (msc->touches[idx].size > 10) {
+	// 		fingers++;
+	// 	}
+	// }
+
+	// return fingers;
+
+	int ii;
+	int touch_size = 0;
+
+	for (ii = 0; ii < msc->ntouches; ii++) {
+		int idx = msc->tracking_ids[ii];
+		if (msc->touches[idx].size > 0.1) {
+			touch_size += msc->touches[idx].size;
 		}
 	}
 
-	return fingers;
+	return touch_size > 5 && touch_size < 12;
+}
+
+static int magicmouse_detect_2fingers(struct magicmouse_sc *msc)
+{
+	int ii;
+	int touch_size = 0;
+
+	for (ii = 0; ii < msc->ntouches; ii++) {
+		int idx = msc->tracking_ids[ii];
+		if (msc->touches[idx].size > 0.1) {
+			touch_size += msc->touches[idx].size;
+		}
+	}
+
+	return touch_size > 0.8 && touch_size < 9;
+
+	// int fingers = 0;
+	// int ii;
+
+	// /* Only consider fingers with size > 10 as real clicks.
+	//  * TODO: Consider better palm rejection.
+	//  */
+	// for (ii = 0; ii < msc->ntouches; ii++) {
+	// 	int idx = msc->tracking_ids[ii];
+	// 	if (msc->touches[idx].size > 10) {
+	// 		fingers++;
+	// 	}
+	// }
+
+	// return fingers == 2;
 }
 
 static void magicmouse_emit_buttons(struct magicmouse_sc *msc, int state)
@@ -246,12 +316,17 @@ static void magicmouse_emit_buttons(struct magicmouse_sc *msc, int state)
 		 */
 		if (state == 0) {
 			/* The button was released. */
+			// int t_touches = magicmouse_firm_touch_v2(msc, 16);
+			// printk(KERN_INFO "MAGIC MOUSE DATA: %d %d\n", msc->ntouches, t_touches);
+			// if (last_state == 0 && msc->ntouches == 1 && t_touches == msc->ntouches) {
+			// 	state = 1;
+			// }	
 		} else if (last_state != 0) {
 			state = last_state;
 		} else if (id >= 0 && middle_click_3finger){
 			int x;
 			x = msc->touches[id].x;
-			if (magicmouse_detect_3finger_click(msc) > 2)
+			if (magicmouse_detect_2fingers(msc))
 				state = 4;
 			else if (x <= 0)
 				state = 1;
@@ -266,6 +341,19 @@ static void magicmouse_emit_buttons(struct magicmouse_sc *msc, int state)
 			else
 				state = 4;
 		}/* else: we keep the mouse's guess */
+
+		// int t_count = magicmouse_firm_touch_v2(msc);
+
+		// if (state == 0) {
+		// 	// pass
+		// } else if (last_state == 2) {
+		// 	state = 2;
+		// } else if (state == 1) {
+		// 	if (t_count > 2) {
+		// 		state = 4;
+		// 	}
+		// }
+
 		input_report_key(msc->input, BTN_MIDDLE, state & 4);
 	}
 
@@ -283,62 +371,38 @@ static void magicmouse_emit_touch(struct magicmouse_sc *msc, int raw_id,
 	int id, x, y, size, orientation, touch_major, touch_minor, state, down;
 	int pressure = 0;
 
-	if (input->id.product == USB_DEVICE_ID_APPLE_MAGICMOUSE ||
-		input->id.product == USB_DEVICE_ID_APPLE_MAGICMOUSE2) {
-		/* tdata is 8 bytes per finger detected.
-		 * tdata[0] (lsb of x) and least sig 4bits of tdata[1] (msb of x)
-		 *          are x position of touch on touch surface.
-		 * tdata[1] most sig 4bits (lsb of y) and and tdata[2] (msb of y)
-		 *          are y position of touch on touch surface.
-		 * tdata[1] bits look like [y y y y x x x x]
-		 * tdata[3] touch major axis of ellipse of finger detected
-		 * tdata[4] touch minor axis of ellipse of finger detected
-		 * tdata[5] contains 6bits of size info (lsb) and the two msb of tdata[5]
-		 *          are the lsb of id: [id id size size size size size size]
-		 * tdata[6] 2 lsb bits of tdata[6] are the msb of id and 6msb of tdata[6]
-		 *          are the orientation of the touch. [o o o o o o id id]
-		 * tdata[7] 4 msb are state. 4lsb are unknown.
-		 *
-		 * [ x x x x x x x x ]
-		 * [ y y y y x x x x ]
-		 * [ y y y y y y y y ]
-		 * [touch major      ]
-		 * [touch minor      ]
-		 * [id id s s s s s s]
-		 * [o o o o o o id id]
-		 * [s s s s | unknown]
-		 */
-		id = (tdata[6] << 2 | tdata[5] >> 6) & 0xf;
-		x = (tdata[1] << 28 | tdata[0] << 20) >> 20;
-		y = -((tdata[2] << 24 | tdata[1] << 16) >> 20);
-		size = tdata[5] & 0x3f;
-		orientation = (tdata[6] >> 2) - 32;
-		touch_major = tdata[3];
-		touch_minor = tdata[4];
-		state = tdata[7] & TOUCH_STATE_MASK;
-		down = state != TOUCH_STATE_NONE;
-	} else if (input->id.product == USB_DEVICE_ID_APPLE_MAGICTRACKPAD) {
-		id = (tdata[7] << 2 | tdata[6] >> 6) & 0xf;
-		x = (tdata[1] << 27 | tdata[0] << 19) >> 19;
-		y = -((tdata[3] << 30 | tdata[2] << 22 | tdata[1] << 14) >> 19);
-		size = tdata[6] & 0x3f;
-		orientation = (tdata[7] >> 2) - 32;
-		touch_major = tdata[4];
-		touch_minor = tdata[5];
-		state = tdata[8] & TOUCH_STATE_MASK;
-		down = state != TOUCH_STATE_NONE;
-	} else { /* USB_DEVICE_ID_APPLE_MAGICTRACKPAD2 */
-		id = tdata[8] & 0xf;
-		x = (tdata[1] << 27 | tdata[0] << 19) >> 19;
-		y = -((tdata[3] << 30 | tdata[2] << 22 | tdata[1] << 14) >> 19);
-		size = tdata[6];
-		orientation = (tdata[8] >> 5) - 4;
-		touch_major = tdata[4];
-		touch_minor = tdata[5];
-		pressure = tdata[7];
-		state = tdata[3] & 0xC0;
-		down = state == 0x80;
-	}
+	/* tdata is 8 bytes per finger detected.
+		* tdata[0] (lsb of x) and least sig 4bits of tdata[1] (msb of x)
+		*          are x position of touch on touch surface.
+		* tdata[1] most sig 4bits (lsb of y) and and tdata[2] (msb of y)
+		*          are y position of touch on touch surface.
+		* tdata[1] bits look like [y y y y x x x x]
+		* tdata[3] touch major axis of ellipse of finger detected
+		* tdata[4] touch minor axis of ellipse of finger detected
+		* tdata[5] contains 6bits of size info (lsb) and the two msb of tdata[5]
+		*          are the lsb of id: [id id size size size size size size]
+		* tdata[6] 2 lsb bits of tdata[6] are the msb of id and 6msb of tdata[6]
+		*          are the orientation of the touch. [o o o o o o id id]
+		* tdata[7] 4 msb are state. 4lsb are unknown.
+		*
+		* [ x x x x x x x x ]
+		* [ y y y y x x x x ]
+		* [ y y y y y y y y ]
+		* [touch major      ]
+		* [touch minor      ]
+		* [id id s s s s s s]
+		* [o o o o o o id id]
+		* [s s s s | unknown]
+		*/
+	id = (tdata[6] << 2 | tdata[5] >> 6) & 0xf;
+	x = (tdata[1] << 28 | tdata[0] << 20) >> 20;
+	y = -((tdata[2] << 24 | tdata[1] << 16) >> 20);
+	size = tdata[5] & 0x3f;
+	orientation = (tdata[6] >> 2) - 32;
+	touch_major = tdata[3];
+	touch_minor = tdata[4];
+	state = tdata[7] & TOUCH_STATE_MASK;
+	down = state != TOUCH_STATE_NONE;
 
 	/* Store tracking ID and other fields. */
 	msc->tracking_ids[raw_id] = id;
@@ -349,22 +413,21 @@ static void magicmouse_emit_touch(struct magicmouse_sc *msc, int raw_id,
 	/* If requested, emulate a scroll wheel by detecting small
 	 * vertical touch motions.
 	 */
-	if (emulate_scroll_wheel &&
-			(input->id.product != USB_DEVICE_ID_APPLE_MAGICTRACKPAD2)) {
+	if (emulate_scroll_wheel) {
 		unsigned long now = jiffies;
 		int step_x = msc->touches[id].scroll_x - x;
 		int step_y = msc->touches[id].scroll_y - y;
-		int step_hr = ((64 - (int)scroll_speed) * msc->scroll_accel) /
+		int step_hr = ((128 - (int)scroll_speed) * msc->scroll_accel) /
 			      SCROLL_HR_STEPS;
 		int step_x_hr = msc->touches[id].scroll_x_hr - x;
 		int step_y_hr = msc->touches[id].scroll_y_hr - y;
 
 		/* Determine if the mouse has moved, if so then disable scrolling. */
 		bool continue_scroll = true;
-		if (stop_scroll_while_moving)
-		{
-			continue_scroll = msc->x == mouse_loc_x && msc->y == mouse_loc_y;
-		}
+		// if (stop_scroll_while_moving)
+		// {
+		// 	continue_scroll = msc->x == mouse_loc_x && msc->y == mouse_loc_y;
+		// }
 
 		if (continue_scroll) {
 			/* Calculate and apply the scroll motion. */
@@ -402,6 +465,26 @@ static void magicmouse_emit_touch(struct magicmouse_sc *msc, int raw_id,
 				} else {
 					step_y /= (64 - (int)scroll_speed) * msc->scroll_accel;
 				}
+
+				// if (!magicmouse_detect_2fingers(msc)) {
+				int t_touches = magicmouse_firm_touch_v2(msc, 5);
+				// if (msc->ntouches != 1 || t_touches != msc->ntouches) {
+				if (t_touches != 0 || x < middle_button_start || x > middle_button_stop) {
+					step_x = 0;
+					step_y = 0;
+					step_x_hr = 0;
+					step_y_hr = 0;
+				}
+
+				// if (abs(msc->x - mouse_loc_x) > 3) {
+				// 	step_x = 0;
+				// 	step_x_hr = 0;
+				// }
+
+				// if (abs(msc->y - mouse_loc_y) > 3) {
+				// 	step_y = 0;
+				// 	step_y_hr = 0;
+				// }
 
 				if (step_x != 0) {
 					msc->touches[id].scroll_x -= step_x *
